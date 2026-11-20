@@ -12,8 +12,18 @@ const RADIUS = 0.28;
 const isTouch = matchMedia('(pointer: coarse)').matches;
 
 const canvas = $('#c');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+// ?aa=0 / ?pr=1 let slow devices (or video capture) trade quality for speed
+const QS = new URLSearchParams(location.search);
+const NORENDER = QS.has('norender'); // logic-only runs for scripted captures
+const REC = QS.has('rec');
+if (REC) {
+  const st = document.createElement('style');
+  st.textContent = '*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}';
+  document.head.appendChild(st);
+}
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: QS.get('aa') !== '0', preserveDrawingBuffer: REC, powerPreference: 'high-performance' });
+renderer.setPixelRatio(QS.has('pr') ? clampPR(+QS.get('pr')) : Math.min(window.devicePixelRatio || 1, 2));
+function clampPR(v) { return Number.isFinite(v) && v > 0 ? Math.min(v, 3) : 1; }
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
@@ -219,7 +229,8 @@ function updateWalk(dt) {
       if (w.i >= w.path.length) {
         if (w.look) lookAtPoint(w.look, 0.6);
         S.walk = null;
-        if (w.look) toast('就在眼前了，轻点它翻开', 1800);
+        if (w.onArrive) w.onArrive();
+        else if (w.look) toast(w.arriveMsg || '就在眼前了，轻点它翻开', 1800);
       }
     }
   }
@@ -292,6 +303,71 @@ function updateEntering(dt) {
   }
 }
 
+/* ---------------- leaving ---------------- */
+let leaveT = -1;
+const DOOR_SPOT = new THREE.Vector2(0.38, -0.85);
+const leaveCurve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(0.38, EYE, -0.85),
+  new THREE.Vector3(0.44, 1.56, -0.1),
+  new THREE.Vector3(0.44, 1.58, 1.2),
+  new THREE.Vector3(0.22, 1.6, 3.6),
+  new THREE.Vector3(0, 1.6, 6.4),
+]);
+
+function leaveShop() {
+  if (S.phase !== 'inside' || S.reading) return;
+  S.turn = null;
+  if (Math.hypot(S.pos.x - DOOR_SPOT.x, S.pos.z - DOOR_SPOT.y) > 0.12) {
+    walkTo(DOOR_SPOT.x, DOOR_SPOT.y);
+    S.walk.onArrive = leaveShop;
+    toast('往门口走……', 1200);
+    return;
+  }
+  A.initAudio();
+  S.walk = null;
+  S.phase = 'leaving';
+  leaveT = 0;
+  S.leaveYaw0 = S.yaw; S.leavePitch0 = S.pitch;
+  $('#hud').classList.remove('show');
+  $('#tips').classList.remove('show');
+  A.doorSlide(1.0);
+  setTimeout(() => A.chime(2), 380);
+  toast('谢谢光临 · 雪夜路滑，慢走', 2800);
+}
+
+function updateLeaving(dt) {
+  leaveT += dt;
+  const t = leaveT;
+  // door: open, then close behind us
+  const open = ease(clamp(t / 1.0, 0, 1)) * (1 - ease(clamp((t - 3.1) / 1.0, 0, 1)));
+  W.door.right.position.x = lerp(W.door.closedX, W.door.openX, open);
+  if (t - dt < 3.1 && t >= 3.1) { A.doorSlide(0.9); setTimeout(() => A.chime(1), 700); }
+  // walk out
+  const ck = clamp((t - 0.55) / 4.0, 0, 1);
+  const p = leaveCurve.getPoint(ease(ck));
+  const prev = S.pos.clone();
+  S.pos.copy(p);
+  S.stepAcc += prev.distanceTo(p);
+  if (S.stepAcc > 0.62 && ck > 0 && ck < 1) { S.stepAcc = 0; stepSound(); }
+  // face the street, then turn around to look back at the shop
+  const yOut = S.leaveYaw0 + angDiff(S.leaveYaw0, PI);
+  const yawA = lerp(S.leaveYaw0, yOut, ease(clamp(t / 1.1, 0, 1)));
+  S.yaw = lerp(yawA, yOut + PI, ease(clamp((t - 3.5) / 2.2, 0, 1)));
+  S.pitch = lerp(S.leavePitch0, 0.02, ease(clamp(t / 1.2, 0, 1)));
+  S.pitch = lerp(S.pitch, 0.06, ease(clamp((t - 3.5) / 2.2, 0, 1)));
+  W.norenLift = Math.max(0, 1 - Math.abs(p.z - 0.25) / 0.9) * 1.3;
+  S.inside = clamp((1.2 - p.z) / 2.0, 0, 1);
+  A.setAmbience(S.inside);
+  if (t > 6.0) {
+    S.phase = 'outside';
+    S.yaw = angDiff(0, S.yaw); S.vyaw = S.vpitch = 0;
+    W.norenLift = 0;
+    $('#enterBtn').textContent = '再次推门';
+    $('#intro').classList.remove('hide');
+    $('#intro').classList.add('show');
+  }
+}
+
 /* ---------------- atmosphere ---------------- */
 const fogOut = new THREE.Color('#1b2440'), fogIn = new THREE.Color('#2a1c12');
 const hemiOut = new THREE.Color('#8fa3d0'), hemiIn = new THREE.Color('#d0a77c');
@@ -341,12 +417,13 @@ function onTap(x, y) {
     else { walkToRec(p.rec); toast('走过去看看……', 1200); }
     return;
   }
+  if (p.kind === 'door') { leaveShop(); return; }
   if (p.kind === 'cat') {
     const d = camera.position.distanceTo(p.hit.point);
     if (d < 2.6) {
-      A.purr(); W.cat.wake = 2.2;
+      petStroke(x, y, 1);
       toast(['墨丸打着呼噜，眯起一只眼看了看你', '墨丸把尾巴绕得更紧了一点', '墨丸：喵。（继续睡）'][Math.floor(Math.random() * 3)]);
-    } else walkTo(2.2, -9.4, p.hit.point.clone());
+    } else { walkTo(2.2, -9.4, p.hit.point.clone()); S.walk.arriveMsg = '墨丸就在眼前，用手指在它背上摸一摸'; }
     return;
   }
   if (p.kind === 'floor') { walkTo(p.hit.point.x, p.hit.point.z); return; }
@@ -488,23 +565,54 @@ function updateTags() {
   }
 }
 
+/* ---------------- petting the cat ---------------- */
+let purrUntil = 0;
+function petStroke(x, y, amount) {
+  const c = W.cat;
+  c.pet = Math.min(1.6, c.pet + 0.5 * amount);
+  c.wake = Math.max(c.wake, 1.2);
+  if (time > purrUntil) { A.purr(); purrUntil = time + 2.0; }
+  const fx = $('#fx');
+  const el = document.createElement('div');
+  const isText = Math.random() < 0.3;
+  el.className = isText ? 'heart purr' : 'heart';
+  el.textContent = isText ? ['呼噜', '咕噜噜', '喵～'][Math.floor(Math.random() * 3)] : '♥';
+  el.style.left = `${x + (Math.random() - 0.5) * 30}px`;
+  el.style.top = `${y - 10}px`;
+  el.style.setProperty('--dx', `${(Math.random() - 0.5) * 50}px`);
+  fx.appendChild(el);
+  setTimeout(() => el.remove(), 1600);
+}
+
 /* ---------------- input ---------------- */
 let down = null;
 canvas.addEventListener('pointerdown', (e) => {
   if (down) return;
-  down = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), drag: false };
+  down = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), drag: false, pet: false, petAcc: 0, strokes: 0 };
   S.vyaw = S.vpitch = 0;
+  if (S.phase === 'inside' && !S.reading) {
+    const p = pick(e.clientX, e.clientY);
+    if (p && p.kind === 'cat' && camera.position.distanceTo(p.hit.point) < 2.6) down.pet = true;
+  }
   canvas.setPointerCapture(e.pointerId);
 });
 canvas.addEventListener('pointermove', (e) => {
   if (down && e.pointerId === down.id) {
     const dx = e.clientX - down.lx, dy = e.clientY - down.ly;
     down.lx = e.clientX; down.ly = e.clientY;
-    if (!down.drag && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 7) { down.drag = true; canvas.style.cursor = 'grabbing'; }
+    if (!down.drag && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 7) { down.drag = true; canvas.style.cursor = down.pet ? 'pointer' : 'grabbing'; }
+    if (down.pet) {
+      down.petAcc += Math.hypot(dx, dy);
+      if (down.petAcc > 38) { down.petAcc = 0; down.strokes++; petStroke(e.clientX, e.clientY, 0.6); }
+      return;
+    }
     if (down.drag && !S.reading && S.phase !== 'entering' && S.phase !== 'loading') {
       const k = (isTouch ? 0.0052 : 0.0042) * (camera.fov / 65);
       S.yaw += dx * k; S.pitch += dy * k;
-      S.vyaw = dx * k * 60; S.vpitch = dy * k * 60;
+      // fling velocity from real elapsed time, so it doesn't depend on the pointer event rate
+      const now = performance.now(), dtm = Math.max(8, now - (down.lt || now - 16)) / 1000;
+      down.lt = now;
+      S.vyaw = lerp(S.vyaw, (dx * k) / dtm, 0.6); S.vpitch = lerp(S.vpitch, (dy * k) / dtm, 0.6);
       S.turn = null;
     }
   } else if (!isTouch) {
@@ -515,9 +623,12 @@ canvas.addEventListener('pointermove', (e) => {
 const endPointer = (e) => {
   if (!down || e.pointerId !== down.id) return;
   const wasTap = !down.drag && performance.now() - down.t < 650;
+  const petted = down.pet && down.strokes > 0;
+  if (performance.now() - (down.lt || 0) > 80) { S.vyaw = 0; S.vpitch = 0; }
   down = null;
   canvas.style.cursor = '';
-  if (wasTap) { S.vyaw = S.vpitch = 0; onTap(e.clientX, e.clientY); }
+  if (petted) toast(['墨丸舒服得把下巴抬了起来', '墨丸的呼噜声像一只小小的暖炉', '墨丸伸了个懒腰，又往你手心里蹭了蹭'][Math.floor(Math.random() * 3)], 2400);
+  else if (wasTap) { S.vyaw = S.vpitch = 0; onTap(e.clientX, e.clientY); }
 };
 canvas.addEventListener('pointerup', endPointer);
 canvas.addEventListener('pointercancel', (e) => { if (down && e.pointerId === down.id) down = null; });
@@ -580,12 +691,16 @@ function frame() {
   lastT = nowT;
   time += dt;
   if (S.phase === 'outside') {
-    S.yaw += S.vyaw * dt; S.pitch += S.vpitch * dt;
-    S.vyaw *= Math.pow(0.02, dt); S.vpitch *= Math.pow(0.02, dt);
+    if (!down) {
+      S.yaw += S.vyaw * dt; S.pitch += S.vpitch * dt;
+      S.vyaw *= Math.pow(0.02, dt); S.vpitch *= Math.pow(0.02, dt);
+    }
     S.yaw = clamp(S.yaw, -0.95, 0.95); S.pitch = clamp(S.pitch, -0.35, 0.65);
     S.pos.set(Math.sin(time * 0.3) * 0.03, 1.6 + Math.sin(time * 0.6) * 0.01, 6.4);
   } else if (S.phase === 'entering') {
     updateEntering(dt);
+  } else if (S.phase === 'leaving') {
+    updateLeaving(dt);
   } else if (S.phase === 'inside') {
     if (!down && !S.reading) {
       S.yaw += S.vyaw * dt; S.pitch += S.vpitch * dt;
@@ -603,7 +718,8 @@ function frame() {
     updateFlyer(dt);
     updateTags();
     A.tick(dt, S.inside);
-    renderer.render(W.scene, camera);
+    const staticRead = REC && S.reading && reader && reader.isOpen && (!flyer || flyer.t >= 1) && !window.__forceRender;
+    if (!NORENDER && !staticRead && !window.__skipRender) renderer.render(W.scene, camera); else W.scene.updateMatrixWorld();
   }
   requestAnimationFrame(frame);
 }
@@ -627,7 +743,7 @@ function boot() {
     $('#intro').classList.add('show');
   });
   // debug / screenshot hooks
-  window.__shop = { S, W: () => W, enterShop, openBook, walkTo, camera, reader, skipIn() { S.phase = 'inside'; S.inside = 1; S.pos.set(0.38, EYE, -0.85); S.yaw = 0; S.pitch = -0.12; W.norenLift = 0; $('#intro').classList.add('hide'); $('#hud').classList.add('show'); } };
+  window.__shop = { S, W: () => W, A, enterShop, leaveShop, openBook, walkTo, walkToRec, pick, camera, reader, skipIn() { S.phase = 'inside'; S.inside = 1; S.pos.set(0.38, EYE, -0.85); S.yaw = 0; S.pitch = -0.12; W.norenLift = 0; $('#intro').classList.add('hide'); $('#hud').classList.add('show'); } };
 }
 
 requestAnimationFrame(frame);

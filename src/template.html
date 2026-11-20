@@ -61,6 +61,10 @@
   #tips b { color: #ffd58f; font-weight: 600; }
   #toast { position: fixed; left: 50%; top: calc(64px + var(--sat)); transform: translate(-50%, -8px); z-index: 30; padding: 9px 18px; border-radius: 18px; background: rgba(22,15,9,.78); border: 1px solid rgba(230,200,140,.4); font-size: 13px; letter-spacing: .12em; color: #f6e6c2; opacity: 0; transition: all .45s ease; pointer-events: none; white-space: nowrap; }
   #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #fx { position: fixed; inset: 0; z-index: 12; pointer-events: none; overflow: hidden; }
+  .heart { position: absolute; left: 0; top: 0; font-size: 20px; color: #ff9fb0; text-shadow: 0 0 10px rgba(255,140,160,.7); animation: heartUp 1.5s ease-out forwards; will-change: transform, opacity; }
+  .heart.purr { font-size: 13px; letter-spacing: .15em; color: #ffe2b0; text-shadow: 0 0 8px rgba(255,190,110,.8); white-space: nowrap; }
+  @keyframes heartUp { 0% { opacity: 0; translate: -50% -40%; scale: .5; } 15% { opacity: 1; scale: 1.1; } 100% { opacity: 0; translate: calc(-50% + var(--dx, 0px)) -260%; scale: .9; } }
 
   #tags { position: fixed; inset: 0; z-index: 7; pointer-events: none; overflow: hidden; }
   .tag { position: absolute; left: 0; top: 0; padding: 4px 11px 5px; border-radius: 13px; background: rgba(28,18,10,.72); border: 1px solid rgba(230,195,130,.45); color: #f3e2bd; font-size: 12px; letter-spacing: .06em; white-space: nowrap; transition: opacity .35s ease; margin-top: -8px; }
@@ -242,7 +246,8 @@
   <div id="moveBtns"><button id="mvF">进</button><button id="mvB">退</button></div>
 </div>
 <div id="tags"></div>
-<div id="tips">拖动屏幕 <b>环顾四周</b> · 轻点地面 <b>走过去</b><br>走近书架，<b>轻点任意一本书</b> 就能翻开 · 点右侧翻页</div>
+<div id="tips">拖动屏幕 <b>环顾四周</b> · 轻点地面 <b>走过去</b><br>走近书架，<b>轻点任意一本书</b> 就能翻开 · 点右侧翻页<br>柜台上的黑猫可以 <b>摸一摸</b> · 轻点店门 <b>离开</b></div>
+<div id="fx"></div>
 <div id="toast"></div>
 
 <div id="guide" class="panel">
@@ -263,7 +268,8 @@
     <p>· <b>看书</b>：远处的书点一下会先走过去，走近了再点一下，书就从书架上飞到你手里翻开。</p>
     <p>· <b>翻页</b>：点书页右侧翻到下一页，点左侧翻回去；也可以左右滑动。</p>
     <p>· 插着红框卡片的是店主推荐；那些普通的旧书也都能翻开，有一半夹着前一位读者留下的东西。</p>
-    <p>· 柜台上睡着的黑猫叫墨丸，可以摸。</p>
+    <p>· 柜台上睡着的黑猫叫墨丸：走近了，用手指在它背上来回抚摸，它会打呼噜。</p>
+    <p>· <b>离开</b>：回到门口，轻点那扇格子门就会推门出去。</p>
   </div>
 </div>
 

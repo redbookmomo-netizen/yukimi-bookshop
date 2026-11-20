@@ -561,9 +561,12 @@ export function buildWorld() {
     const earR = new THREE.Mesh(new THREE.ConeGeometry(0.026, 0.05, 4), fur); earR.position.set(-0.17, 0.14, 0.09); earR.rotation.set(0.35, 0, 0.2); cat.add(earR);
     const tail = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.022, 8, 24, PI * 1.1), fur); tail.rotation.x = PI / 2; tail.position.set(0, 0.03, 0); tail.rotation.z = 0.9; cat.add(tail);
     const eyeMat = new THREE.MeshBasicMaterial({ color: '#d8c070' });
-    for (const z of [0.025, 0.08]) { const e = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.003, 0.018), eyeMat); e.position.set(-0.232, 0.09, z); e.rotation.y = 0.2; cat.add(e); }
+    for (const z of [0.025, 0.08]) { const e = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.003, 0.018), eyeMat); e.position.set(-0.232, 0.09, z); e.rotation.y = 0.2; cat.add(e); head.attach(e); }
+    head.attach(earL); head.attach(earR);
+    const hitPad = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }));
+    hitPad.scale.set(1.15, 0.75, 0.95); hitPad.position.set(-0.04, 0.1, 0.02); cat.add(hitPad);
     cat.traverse((o) => { if (o.isMesh) { o.userData.type = 'cat'; W.interact.push(o); } });
-    W.cat = { group: cat, body: bodyM, earL, earR, tail, wake: 0 };
+    W.cat = { group: cat, body: bodyM, head, earL, earR, tail, wake: 0, pet: 0, petK: 0, headY: head.position.y };
   }
 
   // kerosene stove + kettle
@@ -708,8 +711,17 @@ export function buildWorld() {
     c.body.scale.y = 0.09 + br * 0.006;
     c.wake = Math.max(0, c.wake - dt);
     const tw = c.wake > 0 ? Math.sin(t * 22) * 0.25 * Math.min(1, c.wake) : 0;
-    c.earL.rotation.x = tw; c.earR.rotation.x = 0.35 - tw;
-    c.tail.rotation.z = 0.9 + (c.wake > 0 ? Math.sin(t * 4) * 0.25 : Math.sin(t * 0.7) * 0.05);
+    // being stroked: lift the head into the hand, stretch, ears relax back, slow happy tail
+    c.pet = Math.max(0, c.pet - dt * 0.45);
+    c.petK += ((c.pet > 0.02 ? 1 : 0) - c.petK) * Math.min(1, dt * 3);
+    const pk = c.petK;
+    c.head.position.y = c.headY + pk * 0.035;
+    c.head.rotation.z = -pk * 0.3;
+    c.head.rotation.x = pk * Math.sin(t * 1.3) * 0.12;
+    c.body.scale.x = 0.2 + pk * 0.018;
+    c.body.scale.y += pk * 0.008 * Math.sin(t * 24);
+    c.earL.rotation.x = tw - pk * 0.35; c.earR.rotation.x = 0.35 - tw + pk * 0.3;
+    c.tail.rotation.z = 0.9 + (c.wake > 0 ? Math.sin(t * 4) * 0.25 : Math.sin(t * 0.7) * 0.05) + pk * Math.sin(t * 2.2) * 0.35;
   });
 
   W.update = (t, dt) => { for (const u of W.updaters) u(t, dt); };
