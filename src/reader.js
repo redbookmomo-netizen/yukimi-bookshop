@@ -211,11 +211,27 @@ export class Reader {
     this.build(face);
   }
 
+  nearCur(k) {
+    // Only keep leaves immediately adjacent to the current spread in the render tree;
+    // display:none on buried leaves prevents iOS WebKit from allocating 40+ Retina 3D CALayers (~280MB Jetsam crash).
+    const lo = this.mode === 'double' ? this.cur - 2 : this.cur - 1;
+    const hi = this.cur + 1;
+    return k >= lo && k <= hi;
+  }
+
   layout(instant = false, changed = -1) {
     const N = this.N;
     this.leaves.forEach((lf, k) => {
+      const active = this.nearCur(k) || k === changed || lf.classList.contains('turning');
+      if (!active) {
+        if (lf.style.display !== 'none') lf.style.display = 'none';
+        return;
+      }
+      const wasNone = lf.style.display === 'none';
+      if (wasNone) lf.style.display = '';
       const flipped = k < this.cur;
-      if (instant) lf.style.transition = 'none';
+      const snap = instant || (wasNone && k !== changed);
+      if (snap) lf.style.transition = 'none';
       lf.style.transform = flipped ? 'rotateY(-180deg)' : 'rotateY(0deg)';
       if (k === changed) {
         lf.style.zIndex = N + 10;
@@ -225,13 +241,14 @@ export class Reader {
           lf.style.zIndex = flipped ? k + 1 : N - k;
           lf.classList.remove('turning');
           if (this.mode === 'single' && k < this.cur) lf.style.visibility = 'hidden';
+          if (!this.nearCur(k)) lf.style.display = 'none';
         }, FLIP_MS);
         this.timers.push(tm);
       } else if (!lf.classList.contains('turning')) {
         lf.style.zIndex = flipped ? k + 1 : N - k;
         if (this.mode === 'single') lf.style.visibility = flipped ? 'hidden' : 'visible';
       }
-      if (instant) { void lf.offsetWidth; lf.style.transition = ''; }
+      if (snap) { void lf.offsetWidth; lf.style.transition = ''; }
     });
     let tx = 0;
     if (this.mode === 'double') {
@@ -305,7 +322,7 @@ export class Reader {
     this.root.classList.remove('open');
     this.timers.forEach(clearTimeout); this.timers = [];
     A.bookClose();
-    setTimeout(() => { if (!this.isOpen) this.stage.innerHTML = ''; }, 400);
+    setTimeout(() => { if (!this.isOpen) { this.stage.innerHTML = ''; this.leaves = []; this.bookEl = null; } }, 380);
     if (this.onClose) this.onClose();
   }
 }

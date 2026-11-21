@@ -202,7 +202,8 @@ export function buildWorld() {
     sign.position.set(0, 3.55, 0.06); scene.add(sign);
     box(3.0, 0.08, 0.14, darkWood, 0, 3.94, 0.07); box(3.0, 0.06, 0.16, snowWhite, 0, 3.99, 0.08);
     // 2F window
-    const w2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.8), new THREE.MeshBasicMaterial({ map: T.windowGlowTexture(3), color: '#9c7a55' }));
+    const winTexPool = [0, 1, 2, 3].map((k) => T.windowGlowTexture(k + 1));
+    const w2 = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.8), new THREE.MeshBasicMaterial({ map: winTexPool[2], color: '#9c7a55' }));
     w2.position.set(0, 4.6, 0.03); scene.add(w2);
     box(2.6, 0.06, 0.2, darkWood, 0, 4.17, 0.08); box(2.6, 0.05, 0.2, snowWhite, 0, 4.21, 0.09);
     // main roof
@@ -222,11 +223,14 @@ export function buildWorld() {
     const doorLight = new THREE.PointLight('#ffc27a', 7, 14, 2); doorLight.position.set(0, 2.05, 0.95); scene.add(doorLight); W.lights.doorLight = doorLight;
     // noren
     const nt = T.norenTexture();
+    const norenMat = new THREE.MeshLambertMaterial({ map: nt, side: THREE.DoubleSide });
     W.noren = [];
     for (let i = 0; i < 3; i++) {
-      const tex = nt.clone(); tex.repeat.set(1 / 3, 1); tex.offset.set(i / 3, 0); tex.needsUpdate = true;
+      const pg = new THREE.PlaneGeometry(0.6, 0.78);
+      const uv = pg.attributes.uv;
+      for (let u = 0; u < uv.count; u++) uv.setX(u, uv.getX(u) / 3 + i / 3);
       const pivot = new THREE.Group(); pivot.position.set(-0.62 + i * 0.62, 2.28, 0.13); scene.add(pivot);
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.78), new THREE.MeshLambertMaterial({ map: tex, side: THREE.DoubleSide }));
+      const m = new THREE.Mesh(pg, norenMat);
       m.position.y = -0.39; pivot.add(m);
       m.userData.type = 'door'; W.interact.push(m);
       W.noren.push(pivot);
@@ -244,9 +248,9 @@ export function buildWorld() {
       box(8.0, 0.07, 0.9, roofMat, 0, 0, 0.42, ev); box(8.0, 0.1, 0.86, snowWhite, 0, 0.1, 0.4, ev);
       for (let k = 0; k < 2; k++) {
         const lit = R() < 0.7;
-        const wm = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.0), new THREE.MeshBasicMaterial({ map: T.windowGlowTexture(side * 10 + k), color: lit ? '#c99a62' : '#2a2a35' }));
+        const wm = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 1.0), new THREE.MeshBasicMaterial({ map: winTexPool[(k + (side > 0 ? 2 : 0)) % 4], color: lit ? '#c99a62' : '#2a2a35' }));
         wm.position.set(cx + (k ? 2 : -1.8) * side, 1.6, -0.28); scene.add(wm);
-        const wm2 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.7), new THREE.MeshBasicMaterial({ map: T.windowGlowTexture(side * 20 + k), color: R() < 0.5 ? '#8f6c48' : '#25252e' }));
+        const wm2 = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.7), new THREE.MeshBasicMaterial({ map: winTexPool[(k + 1 + (side > 0 ? 2 : 0)) % 4], color: R() < 0.5 ? '#8f6c48' : '#25252e' }));
         wm2.position.set(cx + (k ? 2 : -1.8) * side, 4.0, -0.28); scene.add(wm2);
       }
     }
@@ -257,7 +261,7 @@ export function buildWorld() {
       hb.position.set(i * 6, hh / 2, 17); scene.add(hb);
       box(5.9, 0.25, 4.4, snowWhite, i * 6, hh + 0.1, 17);
       if (R() < 0.7) {
-        const wm = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.9), new THREE.MeshBasicMaterial({ map: T.windowGlowTexture(i + 40), color: '#b98c58' }));
+        const wm = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.9), new THREE.MeshBasicMaterial({ map: winTexPool[(i + 7) % 4], color: '#b98c58' }));
         wm.position.set(i * 6 + (R() - 0.5) * 2, 1.7, 14.98); wm.rotation.y = PI; scene.add(wm);
       }
     }

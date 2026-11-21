@@ -13,18 +13,31 @@ export function rng(seed) {
   };
 }
 
+let sharedCanvas = null;
 function mk(w, h) {
-  const c = document.createElement('canvas');
+  const c = sharedCanvas || (sharedCanvas = document.createElement('canvas'));
   c.width = w; c.height = h;
-  return [c, c.getContext('2d')];
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  return [c, g];
 }
 
-function toTex(c, { repeat = [1, 1], srgb = true } = {}) {
-  const t = new THREE.CanvasTexture(c);
+const ANISO = new URLSearchParams(location.search).has('rec') ? 4 : 8;
+function toTex(c, { repeat = [1, 1], srgb = true, mipmaps = true } = {}) {
+  const w = c.width, h = c.height;
+  const raw = c.getContext('2d').getImageData(0, 0, w, h).data;
+  const data = new Uint8Array(raw.buffer, raw.byteOffset, raw.byteLength);
+  // Release iOS WebKit 2D Canvas IOSurface immediately so all 50+ procedural textures take 0 canvas pool memory
+  c.width = 1; c.height = 1;
+  const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
+  t.flipY = true;
+  t.generateMipmaps = mipmaps;
+  t.minFilter = mipmaps ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
+  t.magFilter = THREE.LinearFilter;
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat[0], repeat[1]);
-  t.anisotropy = new URLSearchParams(location.search).has('rec') ? 4 : 16;
+  t.anisotropy = mipmaps ? ANISO : 1;
   t.needsUpdate = true;
   return t;
 }
@@ -41,8 +54,7 @@ function noise(g, w, h, amt, seed = 7) {
 }
 
 /* ---------- wood ---------- */
-export function woodTexture({ w = 512, h = 512, base = '#6b4a2e', planks = 4, seed = 1, repeat = [1, 1], seams = true, grainAlpha = 0.32 } = {}) {
-  const [c, g] = mk(w, h);
+function paintWood(g, w, h, { base = '#6b4a2e', planks = 4, seed = 1, seams = true, grainAlpha = 0.32 } = {}) {
   const r = rng(seed);
   g.fillStyle = base; g.fillRect(0, 0, w, h);
   const ph = h / planks;
@@ -82,6 +94,12 @@ export function woodTexture({ w = 512, h = 512, base = '#6b4a2e', planks = 4, se
     }
   }
   noise(g, w, h, 14, seed + 3);
+}
+
+export function woodTexture(opts = {}) {
+  const { w = 512, h = 512, repeat = [1, 1] } = opts;
+  const [c, g] = mk(w, h);
+  paintWood(g, w, h, opts);
   return toTex(c, { repeat });
 }
 
@@ -256,9 +274,9 @@ function vtext(g, text, cx, y0, size, gap = 1.08) {
 }
 
 export function featuredSpine(book) {
-  const w = 128, h = 576;
-  const [c, g] = mk(w * 2, h * 2);
-  g.scale(2, 2);
+  const w = 128, h = 576, sc = 1.5;
+  const [c, g] = mk(w * sc, h * sc);
+  g.scale(sc, sc);
   g.fillStyle = book.color; g.fillRect(0, 0, w, h);
   for (let y = 0; y < h; y += 2) {
     g.fillStyle = `rgba(0,0,0,${Math.random() * 0.06})`; g.fillRect(0, y, w, 1);
@@ -295,9 +313,9 @@ export function featuredSpine(book) {
 }
 
 export function coverTexture(book) {
-  const w = 360, h = 512;
-  const [c, g] = mk(w * 2, h * 2);
-  g.scale(2, 2);
+  const w = 360, h = 512, sc = 1.5;
+  const [c, g] = mk(w * sc, h * sc);
+  g.scale(sc, sc);
   g.fillStyle = book.color; g.fillRect(0, 0, w, h);
   // cloth weave
   for (let y = 0; y < h; y += 2) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.07})`; g.fillRect(0, y, w, 1); }
@@ -332,8 +350,7 @@ export function coverTexture(book) {
 export function signboardTexture() {
   const w = 1024, h = 256;
   const [c, g] = mk(w, h);
-  const wood = woodTexture({ w: 1024, h: 256, base: '#3b2416', planks: 1, seams: false, seed: 42 }).image;
-  g.drawImage(wood, 0, 0);
+  paintWood(g, w, h, { base: '#3b2416', planks: 1, seams: false, seed: 42 });
   g.strokeStyle = '#1b0f08'; g.lineWidth = 14; g.strokeRect(7, 7, w - 14, h - 14);
   g.strokeStyle = 'rgba(214,176,98,0.6)'; g.lineWidth = 2; g.strokeRect(22, 22, w - 44, h - 44);
   g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -348,9 +365,9 @@ export function signboardTexture() {
 }
 
 export function norenTexture() {
-  const w = 768, h = 384;
-  const [c, g] = mk(w * 2, h * 2);
-  g.scale(2, 2);
+  const w = 768, h = 384, sc = 4 / 3;
+  const [c, g] = mk(Math.round(w * sc), Math.round(h * sc));
+  g.scale(sc, sc);
   g.fillStyle = '#1d2f4f'; g.fillRect(0, 0, w, h);
   for (let y = 0; y < h; y += 2) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`; g.fillRect(0, y, w, 1); }
   for (let x = 0; x < w; x += 3) { g.fillStyle = `rgba(120,150,200,${Math.random() * 0.05})`; g.fillRect(x, 0, 1, h); }
@@ -372,9 +389,9 @@ export function norenTexture() {
 }
 
 export function popCardTexture(text) {
-  const w = 160, h = 200;
-  const [c, g] = mk(w * 2, h * 2);
-  g.scale(2, 2);
+  const w = 160, h = 200, sc = 1.5;
+  const [c, g] = mk(w * sc, h * sc);
+  g.scale(sc, sc);
   g.fillStyle = '#f6edd6'; g.fillRect(0, 0, w, h);
   g.strokeStyle = '#b5332a'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12);
   g.fillStyle = '#b5332a'; g.font = `bold 30px ${SERIF}`; g.textAlign = 'center'; g.textBaseline = 'middle';
@@ -410,7 +427,7 @@ export function glowTexture(inner = 'rgba(255,220,160,1)', mid = 'rgba(255,170,9
   const gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
   gr.addColorStop(0, inner); gr.addColorStop(0.25, mid); gr.addColorStop(1, 'rgba(0,0,0,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  const t = toTex(c, { mipmaps: false }); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t;
 }
 
 export function flakeTexture() {
@@ -418,7 +435,7 @@ export function flakeTexture() {
   const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
   gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,0.8)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
   g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+  const t = toTex(c, { mipmaps: false }); t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; return t;
 }
 
 export function windowGlowTexture(seed = 1) {

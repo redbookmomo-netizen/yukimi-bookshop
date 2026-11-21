@@ -22,7 +22,7 @@ if (REC) {
   document.head.appendChild(st);
 }
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: QS.get('aa') !== '0', preserveDrawingBuffer: REC, powerPreference: 'high-performance' });
-renderer.setPixelRatio(QS.has('pr') ? clampPR(+QS.get('pr')) : Math.min(window.devicePixelRatio || 1, 2.5));
+renderer.setPixelRatio(QS.has('pr') ? clampPR(+QS.get('pr')) : Math.min(window.devicePixelRatio || 1, isTouch ? 2 : 2.5));
 function clampPR(v) { return Number.isFinite(v) && v > 0 ? Math.min(v, 3) : 1; }
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -520,6 +520,9 @@ function updateFlyer(dt) {
     hideRec(flyer.rec, false);
     W.scene.remove(flyer.m);
     flyer.m.geometry.dispose();
+    if (!flyer.rec.featured && Array.isArray(flyer.m.material)) {
+      new Set(flyer.m.material).forEach((mt) => mt.dispose());
+    }
     flyer = null;
     S.reading = false;
   }
