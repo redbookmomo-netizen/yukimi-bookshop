@@ -697,7 +697,12 @@ function frame() {
   lastT = nowT;
   time += dt;
   if (S.phase === 'outside') {
-    if (!down) {
+    if (S.turn) {
+      const t = S.turn; t.t += dt / t.dur;
+      const k = ease(Math.min(1, t.t));
+      S.yaw = lerp(t.y0, t.y1, k); S.pitch = lerp(t.p0, t.p1, k);
+      if (t.t >= 1) S.turn = null;
+    } else if (!down) {
       S.yaw += S.vyaw * dt; S.pitch += S.vpitch * dt;
       S.vyaw *= Math.pow(0.02, dt); S.vpitch *= Math.pow(0.02, dt);
     }
@@ -775,11 +780,13 @@ async function startTour() {
     await wait(0.35);
   };
 
-  toast('自动漫游开始 · 随时轻触屏幕可接管操作', 2600);
+  $('#tourBtn')?.blur();
   if (S.reading) { reader.close(); await waitCond(() => !S.reading, 3); }
   if (S.phase === 'outside') {
-    await pan(-0.28, 0.02, 1.0); if (!ok()) return;
-    await pan(0.28, -0.02, 0.9); if (!ok()) return;
+    await wait(0.6); if (!ok()) return;
+    await pan(-0.26, 0.02, 1.05); if (!ok()) return;
+    await pan(0.26, -0.02, 0.95); if (!ok()) return;
+    await wait(0.25); if (!ok()) return;
     enterShop();
     await waitCond(() => S.phase === 'inside', 10);
   }
@@ -793,7 +800,7 @@ async function startTour() {
   await readRec(W.featuredRecs.find((r) => r.book.id === 'tebukuro'), 3, 1.7);
   // 3. 左墙《雪女》+ 随机普通旧书
   await readRec(W.featuredRecs.find((r) => r.book.id === 'yukionna'), 2, 1.6);
-  const filler = W.bookMeshes[0]?.userData.recs.find((r) => !r.hidden && r.pos.x < -3.5 && Math.abs(r.pos.z + 4.3) < 0.7 && r.pos.y > 1.15 && r.pos.y < 1.55);
+  const filler = W.bookMeshes.flatMap((bm) => bm.userData.recs).find((r) => !r.hidden && !r.featured && r.pos.x < -3.5 && Math.abs(r.pos.z + 4.3) < 0.65 && r.pos.y > 1.18 && r.pos.y < 1.52);
   if (filler) await readRec(filler, 2, 1.55);
   // 4. 里墙丸窗与暖炉
   const hojoki = W.featuredRecs.find((r) => r.book.id === 'hojoki');
