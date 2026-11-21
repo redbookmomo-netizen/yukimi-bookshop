@@ -41,6 +41,7 @@
   #intro .top p { margin: 10px 0 0; font-size: 13px; letter-spacing: .25em; color: #c9c3b0; }
   #enterBtn { pointer-events: auto; position: absolute; left: 50%; bottom: calc(46px + var(--sab)); transform: translateX(-50%); padding: 13px 34px; border-radius: 30px; border: 1px solid rgba(240,210,150,.6); background: rgba(30,22,14,.55); color: #f6e5bf; font-size: 16px; letter-spacing: .4em; text-indent: .4em; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); cursor: pointer; box-shadow: 0 0 24px rgba(255,190,110,.25); animation: glowp 2.6s ease-in-out infinite; }
   #enterBtn.pulse { animation: glowp .6s ease-in-out 3; }
+  #tourBtn { pointer-events: auto; position: absolute; left: 50%; bottom: calc(108px + var(--sab)); transform: translateX(-50%); padding: 7px 20px; border-radius: 20px; border: 1px solid rgba(230,205,155,.38); background: rgba(20,16,12,.45); color: #dfd0b0; font-size: 12px; letter-spacing: .28em; text-indent: .28em; cursor: pointer; }
   @keyframes glowp { 50% { box-shadow: 0 0 38px rgba(255,190,110,.55); border-color: rgba(255,225,170,.95); } }
   #intro .sub { position: absolute; left: 0; right: 0; bottom: calc(16px + var(--sab)); text-align: center; font-size: 11px; letter-spacing: .25em; color: #8d93ad; }
 
@@ -48,7 +49,7 @@
   #hud { position: fixed; inset: 0; z-index: 8; pointer-events: none; opacity: 0; transition: opacity 1s ease; }
   #hud.show { opacity: 1; }
   #hud.dim { opacity: 0; }
-  #hud .brand { position: absolute; top: calc(12px + var(--sat)); left: 14px; font-size: 15px; letter-spacing: .3em; color: #f1dfb6; text-shadow: 0 1px 8px rgba(0,0,0,.9); }
+  #hud .brand { position: absolute; top: calc(12px + var(--sat)); left: 14px; font-size: 15px; letter-spacing: .3em; color: #f1dfb6; text-shadow: 0 1px 10px rgba(0,0,0,.95), 0 0 4px rgba(0,0,0,.85); }
   #hud .brand small { display: block; font-size: 10px; letter-spacing: .15em; color: #b9a98a; margin-top: 3px; }
   #hud .btns { position: absolute; top: calc(10px + var(--sat)); right: 10px; display: flex; gap: 8px; pointer-events: auto; }
   .hbtn { height: 36px; min-width: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid rgba(230,200,140,.45); background: rgba(24,16,10,.55); color: #f1dfb6; font-size: 13px; letter-spacing: .15em; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); cursor: pointer; display: flex; align-items: center; justify-content: center; }
@@ -233,12 +234,14 @@
     <p>今夜有雪，店还开着。</p>
   </div>
   <button id="enterBtn">推门而入</button>
+  <button id="tourBtn">自动漫游一圈</button>
   <div class="sub">也可以直接轻触那扇格子门</div>
 </div>
 
 <div id="hud">
   <div class="brand">雪見堂<small>藏书 <span id="bookCount">—</span> 册</small></div>
   <div class="btns">
+    <button class="hbtn" id="btnTour">漫游</button>
     <button class="hbtn" id="btnGuide">店主推荐</button>
     <button class="hbtn" id="btnSound" aria-label="声音">♪</button>
     <button class="hbtn" id="btnHelp" aria-label="帮助">？</button>

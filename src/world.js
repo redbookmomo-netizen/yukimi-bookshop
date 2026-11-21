@@ -120,15 +120,17 @@ export function buildWorld() {
     // window lattices (格子) and sills
     const latMat = new THREE.MeshLambertMaterial({ color: '#3b2516' });
     const glass = new THREE.MeshBasicMaterial({ color: '#c8d8ea', transparent: true, opacity: 0.08, depthWrite: false });
+    const latGeos = [];
     for (const [x0, x1] of [[-3.3, -1.5], [1.5, 3.3]]) {
       const cx = (x0 + x1) / 2, w = x1 - x0;
-      for (let x = x0 + 0.06; x < x1 - 0.03; x += 0.075) box(0.022, 1.3, 0.03, latMat, x, 1.5, 0.05);
+      for (let x = x0 + 0.06; x < x1 - 0.03; x += 0.075) { const bg = new THREE.BoxGeometry(0.022, 1.3, 0.03); bg.translate(x, 1.5, 0.05); latGeos.push(bg); }
       box(w + 0.1, 0.06, 0.08, latMat, cx, 2.18, 0.04); box(w + 0.1, 0.06, 0.08, latMat, cx, 0.82, 0.04);
       box(w + 0.12, 0.05, 0.2, darkWood, cx, 0.8, 0.1); box(w + 0.1, 0.05, 0.18, snowWhite, cx, 0.84, 0.11);
       const gl = new THREE.Mesh(new THREE.PlaneGeometry(w, 1.3), glass); gl.position.set(cx, 1.5, 0); scene.add(gl);
       // inner frame
       box(w + 0.08, 0.06, 0.06, darkWood, cx, 2.18, -0.04); box(w + 0.08, 0.06, 0.14, darkWood, cx, 0.82, -0.07);
     }
+    scene.add(new THREE.Mesh(mergeGeometries(latGeos), latMat));
     // door frame
     box(0.1, 2.4, 0.18, darkWood, -1.0, 1.2, 0); box(0.1, 2.4, 0.18, darkWood, 1.0, 1.2, 0);
     box(2.1, 0.14, 0.2, darkWood, 0, 2.37, 0);
@@ -157,6 +159,8 @@ export function buildWorld() {
   }
 
   /* ---------------- exterior ---------------- */
+  const extGroup = new THREE.Group(); scene.add(extGroup);
+  W.extGroup = extGroup;
   {
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(70, 34), snowMat);
     ground.rotation.x = -PI / 2; ground.position.set(0, -0.005, 17); scene.add(ground);
@@ -180,14 +184,18 @@ export function buildWorld() {
     // eave over the door & windows
     const eave = new THREE.Group(); eave.position.set(0, 2.62, 0); eave.rotation.x = 0.32; scene.add(eave);
     box(7.8, 0.08, 1.0, roofMat, 0, 0, 0.56, eave);
-    for (let x = -3.85; x <= 3.85; x += 0.22) box(0.06, 0.05, 1.0, new THREE.MeshLambertMaterial({ color: '#25272c' }), x, 0.06, 0.58, eave);
+    const rafGeos = [];
+    for (let x = -3.85; x <= 3.85; x += 0.22) { const rg = new THREE.BoxGeometry(0.06, 0.05, 1.0); rg.translate(x, 0.06, 0.58); rafGeos.push(rg); }
+    eave.add(new THREE.Mesh(mergeGeometries(rafGeos), new THREE.MeshLambertMaterial({ color: '#25272c' })));
     box(7.9, 0.12, 0.95, snowWhite, 0, 0.13, 0.56, eave);
     box(7.9, 0.1, 0.12, darkWood, 0, -0.06, 1.0, eave);
-    // icicles
+    // icicles (merged)
+    const icGeos = [];
     for (let x = -3.7; x <= 3.7; x += 0.17 + R() * 0.25) {
-      const ic = new THREE.Mesh(new THREE.ConeGeometry(0.018, 0.08 + R() * 0.22, 5), new THREE.MeshStandardMaterial({ color: '#dfeaf7', roughness: 0.1, transparent: true, opacity: 0.85 }));
-      ic.rotation.x = PI; ic.position.set(x, 2.62 - 0.33 - 0.06, 0.95 + 0.04); scene.add(ic);
+      const ig = new THREE.ConeGeometry(0.018, 0.08 + R() * 0.22, 5);
+      ig.rotateX(PI); ig.translate(x, 2.62 - 0.33 - 0.06, 0.95 + 0.04); icGeos.push(ig);
     }
+    scene.add(new THREE.Mesh(mergeGeometries(icGeos), new THREE.MeshLambertMaterial({ color: '#dfeaf7', transparent: true, opacity: 0.85 })));
     // signboard
     const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.8, 0.7), new THREE.MeshLambertMaterial({ map: T.signboardTexture(), emissive: '#ffffff', emissiveIntensity: 0.12 }));
     sign.material.emissiveMap = sign.material.map;
@@ -211,7 +219,7 @@ export function buildWorld() {
       glow(glowWarm, 1.5, 0, 0, 0, 0.55, lg);
       W.updaters.push((t) => { lg.rotation.z = Math.sin(t * 0.9 + x) * 0.04; });
     }
-    const doorLight = new THREE.PointLight('#ffc27a', 7, 14, 2); doorLight.position.set(0, 2.05, 0.95); scene.add(doorLight);
+    const doorLight = new THREE.PointLight('#ffc27a', 7, 14, 2); doorLight.position.set(0, 2.05, 0.95); scene.add(doorLight); W.lights.doorLight = doorLight;
     // noren
     const nt = T.norenTexture();
     W.noren = [];
@@ -262,24 +270,35 @@ export function buildWorld() {
     const shade = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.14, 16, 1, true), new THREE.MeshLambertMaterial({ color: '#30343a', side: THREE.DoubleSide }));
     shade.position.set(4.6, 3.88, 2.4); scene.add(shade);
     glow(glowWarm, 2.6, 4.6, 3.75, 2.4, 0.5);
-    const lampLight = new THREE.PointLight('#ffe2b0', 9, 16, 2); lampLight.position.set(4.6, 3.6, 2.4); scene.add(lampLight);
+    const lampLight = new THREE.PointLight('#ffe2b0', 9, 16, 2); lampLight.position.set(4.6, 3.6, 2.4); scene.add(lampLight); W.lights.lampLight = lampLight;
   }
 
   /* ---------------- garden behind the round window ---------------- */
+  const gardenGroup = new THREE.Group(); scene.add(gardenGroup);
+  W.gardenGroup = gardenGroup;
   {
     const g = new THREE.Mesh(new THREE.PlaneGeometry(10, 8), snowMat);
-    g.rotation.x = -PI / 2; g.position.set(0, 0, -16); scene.add(g);
-    const fence = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.2), sidingMat); fence.position.set(0, 1.1, -18.5); scene.add(fence);
-    box(10, 0.1, 0.2, snowWhite, 0, 2.22, -18.5);
-    for (const x of [-5, 5]) { const s = new THREE.Mesh(new THREE.PlaneGeometry(8, 2.2), sidingMat); s.rotation.y = x < 0 ? PI / 2 : -PI / 2; s.position.set(x, 1.1, -16); scene.add(s); }
-    // plum tree
+    g.rotation.x = -PI / 2; g.position.set(0, 0, -16); gardenGroup.add(g);
+    const fence = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.2), sidingMat); fence.position.set(0, 1.1, -18.5); gardenGroup.add(fence);
+    box(10, 0.1, 0.2, snowWhite, 0, 2.22, -18.5, gardenGroup);
+    for (const x of [-5, 5]) { const s = new THREE.Mesh(new THREE.PlaneGeometry(8, 2.2), sidingMat); s.rotation.y = x < 0 ? PI / 2 : -PI / 2; s.position.set(x, 1.1, -16); gardenGroup.add(s); }
+    // plum tree (merged into 2 draw calls instead of ~200)
     const trunkMat = new THREE.MeshLambertMaterial({ color: '#2a1d16' });
-    const blossoms = [];
+    const blossoms = [], trunkGeos = [], snowBrGeos = [];
+    const qTmp = new THREE.Quaternion(), mTmp = new THREE.Matrix4(), sOne = new THREE.Vector3(1, 1, 1);
     const grow = (p, dir, len, rad, depth) => {
       const end = p.clone().addScaledVector(dir, len);
-      const c = new THREE.Mesh(new THREE.CylinderGeometry(rad * 0.7, rad, len, 6), trunkMat);
-      c.position.copy(p).lerp(end, 0.5); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); scene.add(c);
-      if (dir.y > 0.2 && rad > 0.02) { const sn = new THREE.Mesh(new THREE.BoxGeometry(rad * 1.6, 0.03, len * 0.9), snowWhite); sn.position.copy(c.position).add(new THREE.Vector3(0, rad, 0)); sn.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir); scene.add(sn); }
+      const mid = p.clone().lerp(end, 0.5);
+      qTmp.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+      const cg = new THREE.CylinderGeometry(rad * 0.7, rad, len, 6);
+      cg.applyMatrix4(mTmp.compose(mid, qTmp, sOne));
+      trunkGeos.push(cg);
+      if (dir.y > 0.2 && rad > 0.02) {
+        const sg = new THREE.BoxGeometry(rad * 1.6, 0.03, len * 0.9);
+        qTmp.setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
+        sg.applyMatrix4(mTmp.compose(mid.clone().add(new THREE.Vector3(0, rad, 0)), qTmp, sOne));
+        snowBrGeos.push(sg);
+      }
       if (depth <= 0) { for (let i = 0; i < 6; i++) blossoms.push(end.clone().add(new THREE.Vector3((R() - 0.5) * 0.3, (R() - 0.5) * 0.2, (R() - 0.5) * 0.3))); return; }
       const n = 2 + (R() < 0.4 ? 1 : 0);
       for (let i = 0; i < n; i++) {
@@ -289,13 +308,15 @@ export function buildWorld() {
       }
     };
     grow(new THREE.Vector3(-0.9, 0, -14.6), new THREE.Vector3(0.25, 1, 0.1).normalize(), 1.1, 0.11, 4);
+    gardenGroup.add(new THREE.Mesh(mergeGeometries(trunkGeos), trunkMat));
+    if (snowBrGeos.length) gardenGroup.add(new THREE.Mesh(mergeGeometries(snowBrGeos), snowWhite));
     const bl = new THREE.InstancedMesh(new THREE.SphereGeometry(0.035, 6, 4), new THREE.MeshLambertMaterial({ color: '#d2334a', emissive: '#5a0d18' }), blossoms.length);
     const mm = new THREE.Matrix4();
     blossoms.forEach((p, i) => { mm.makeTranslation(p.x, p.y, p.z); bl.setMatrixAt(i, mm); });
-    scene.add(bl);
+    gardenGroup.add(bl);
     // stone lantern (石灯笼)
     const stone = new THREE.MeshLambertMaterial({ color: '#7a7c80' });
-    const tl = new THREE.Group(); tl.position.set(1.15, 0, -13.7); scene.add(tl);
+    const tl = new THREE.Group(); tl.position.set(1.15, 0, -13.7); gardenGroup.add(tl);
     const add = (geo, y, mat = stone) => { const m = new THREE.Mesh(geo, mat); m.position.y = y; tl.add(m); return m; };
     add(new THREE.CylinderGeometry(0.26, 0.3, 0.14, 6), 0.07);
     add(new THREE.CylinderGeometry(0.08, 0.1, 0.6, 8), 0.44);
@@ -654,10 +675,25 @@ export function buildWorld() {
 
   /* ---------------- instanced books ---------------- */
   W.bookMeshes = [];
+  function makeBookBoxGeo() {
+    const raw = new THREE.BoxGeometry(1, 1, 1);
+    // Reorder indices so faces [0,1] (cover), [2,3,5] (pages), [4] (spine) are 3 contiguous groups instead of 6!
+    const idx = raw.index.array;
+    const coverIdx = [...idx.slice(0, 12)];
+    const pagesIdx = [...idx.slice(12, 24), ...idx.slice(30, 36)];
+    const spineIdx = [...idx.slice(24, 30)];
+    raw.setIndex([...coverIdx, ...pagesIdx, ...spineIdx]);
+    raw.clearGroups();
+    raw.addGroup(0, 12, 0);
+    raw.addGroup(12, 18, 1);
+    raw.addGroup(30, 6, 2);
+    return raw;
+  }
+  const bookBoxGeo = makeBookBoxGeo();
   buckets.forEach((list, v) => {
     if (!list.length) return;
-    const mats = [coverMatI, coverMatI, pagesMatI, pagesMatI, spineMats[v], pagesMatI];
-    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), mats, list.length);
+    const mats = [coverMatI, pagesMatI, spineMats[v]];
+    const im = new THREE.InstancedMesh(bookBoxGeo, mats, list.length);
     const recs = [];
     list.forEach((b, i) => {
       im.setMatrixAt(i, b.world); im.setColorAt(i, b.color);
@@ -672,17 +708,20 @@ export function buildWorld() {
 
   /* ---------------- snow ---------------- */
   const flake = T.flakeTexture();
-  const mkSnow = (n, x0, x1, y0, y1, z0, z1, size) => {
+  const mkSnow = (n, x0, x1, y0, y1, z0, z1, size, parent = scene) => {
     const pos = new Float32Array(n * 3), vel = new Float32Array(n), ph = new Float32Array(n);
     for (let i = 0; i < n; i++) {
-      pos[i * 3] = x0 + Math.random() * (x1 - x0); pos[i * 3 + 1] = y0 + Math.random() * (y1 - y0); pos[i * 3 + 2] = z0 + Math.random() * (z1 - z0);
+      let sx = x0 + Math.random() * (x1 - x0), sy = y0 + Math.random() * (y1 - y0), sz = z0 + Math.random() * (z1 - z0);
+      if (Math.hypot(sx, sz - 6.4) < 0.75) sz -= 1.0; // avoid giant blurry blob right on the outside camera lens
+      pos[i * 3] = sx; pos[i * 3 + 1] = sy; pos[i * 3 + 2] = sz;
       vel[i] = 0.35 + Math.random() * 0.5; ph[i] = Math.random() * 10;
     }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-    const p = new THREE.Points(g, new THREE.PointsMaterial({ map: flake, size, transparent: true, depthWrite: false, opacity: 0.95, color: '#ffffff' }));
-    p.frustumCulled = false;
-    scene.add(p);
+    g.boundingSphere = new THREE.Sphere(new THREE.Vector3((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2), Math.hypot(x1 - x0, y1 - y0, z1 - z0) * 0.6);
+    const p = new THREE.Points(g, new THREE.PointsMaterial({ map: flake, size, transparent: true, depthWrite: false, opacity: 0.92, color: '#ffffff' }));
+    parent.add(p);
     W.updaters.push((t, dt) => {
+      if (!p.visible || (p.parent && !p.parent.visible)) return;
       for (let i = 0; i < n; i++) {
         let y = pos[i * 3 + 1] - vel[i] * dt;
         pos[i * 3] += Math.sin(t * 0.8 + ph[i]) * 0.25 * dt + 0.08 * dt;
@@ -692,9 +731,10 @@ export function buildWorld() {
       }
       g.attributes.position.needsUpdate = true;
     });
+    return p;
   };
-  mkSnow(2200, -16, 16, 0, 9, 0.25, 22, 0.07);
-  mkSnow(380, -4.8, 4.8, 0, 4.5, -18.3, -12.3, 0.05);
+  W.frontSnow = mkSnow(2000, -16, 16, 0, 9, 0.25, 22, 0.065);
+  mkSnow(380, -4.8, 4.8, 0, 4.5, -18.3, -12.3, 0.05, gardenGroup);
 
   // noren sway
   W.norenLift = 0;
@@ -731,13 +771,19 @@ export function buildWorld() {
 function branch(scene, p, depth, len, rad, R, spread) {
   const mat = new THREE.MeshLambertMaterial({ color: '#2a1d16' });
   const red = new THREE.MeshLambertMaterial({ color: '#c42c40', emissive: '#3a0610' });
+  const woodGeos = [], budGeos = [];
+  const q = new THREE.Quaternion(), m = new THREE.Matrix4(), s1 = new THREE.Vector3(1, 1, 1);
   const go = (p0, dir, l, r, d) => {
     const end = p0.clone().addScaledVector(dir, l);
-    const c = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.7, r, l, 5), mat);
-    c.position.copy(p0).lerp(end, 0.5); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir); scene.add(c);
+    const cg = new THREE.CylinderGeometry(r * 0.7, r, l, 5);
+    q.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    cg.applyMatrix4(m.compose(p0.clone().lerp(end, 0.5), q, s1));
+    woodGeos.push(cg);
     for (let i = 0; i < 3; i++) {
-      const b = new THREE.Mesh(new THREE.SphereGeometry(0.014, 6, 4), red);
-      b.position.copy(p0).lerp(end, 0.3 + R() * 0.7).add(new THREE.Vector3((R() - 0.5) * 0.03, 0, (R() - 0.5) * 0.03)); scene.add(b);
+      const bg = new THREE.SphereGeometry(0.014, 6, 4);
+      const bp = p0.clone().lerp(end, 0.3 + R() * 0.7).add(new THREE.Vector3((R() - 0.5) * 0.03, 0, (R() - 0.5) * 0.03));
+      bg.translate(bp.x, bp.y, bp.z);
+      budGeos.push(bg);
     }
     if (d <= 0) return;
     for (let i = 0; i < 2; i++) {
@@ -746,4 +792,6 @@ function branch(scene, p, depth, len, rad, R, spread) {
     }
   };
   go(p, new THREE.Vector3(0.15, 1, 0).normalize(), len, rad, depth);
+  scene.add(new THREE.Mesh(mergeGeometries(woodGeos), mat));
+  scene.add(new THREE.Mesh(mergeGeometries(budGeos), red));
 }

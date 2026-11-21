@@ -18,11 +18,11 @@ const NORENDER = QS.has('norender'); // logic-only runs for scripted captures
 const REC = QS.has('rec');
 if (REC) {
   const st = document.createElement('style');
-  st.textContent = '*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}';
+  st.textContent = '*,*::before,*::after{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}#tourBtn,#btnTour{display:none!important}';
   document.head.appendChild(st);
 }
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: QS.get('aa') !== '0', preserveDrawingBuffer: REC, powerPreference: 'high-performance' });
-renderer.setPixelRatio(QS.has('pr') ? clampPR(+QS.get('pr')) : Math.min(window.devicePixelRatio || 1, 2));
+renderer.setPixelRatio(QS.has('pr') ? clampPR(+QS.get('pr')) : Math.min(window.devicePixelRatio || 1, 2.5));
 function clampPR(v) { return Number.isFinite(v) && v > 0 ? Math.min(v, 3) : 1; }
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -373,6 +373,9 @@ const fogOut = new THREE.Color('#1b2440'), fogIn = new THREE.Color('#2a1c12');
 const hemiOut = new THREE.Color('#8fa3d0'), hemiIn = new THREE.Color('#d0a77c');
 function updateAtmos() {
   const k = S.inside;
+  if (W.gardenGroup) W.gardenGroup.visible = k > 0.02;
+  if (W.frontSnow) W.frontSnow.visible = S.pos.z > -0.35 || Math.cos(S.yaw) < 0.42;
+  if (W.lights.lampLight) W.lights.lampLight.visible = k < 0.96 || Math.cos(S.yaw) < 0.2;
   W.scene.fog.color.copy(fogOut).lerp(fogIn, k);
   W.scene.fog.near = lerp(9, 7, k); W.scene.fog.far = lerp(55, 38, k);
   W.lights.hemi.color.copy(hemiOut).lerp(hemiIn, k);
@@ -587,6 +590,7 @@ function petStroke(x, y, amount) {
 /* ---------------- input ---------------- */
 let down = null;
 canvas.addEventListener('pointerdown', (e) => {
+  if (S.touring && !REC) stopTour(true);
   if (down) return;
   down = { id: e.pointerId, x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, t: performance.now(), drag: false, pet: false, petAcc: 0, strokes: 0 };
   S.vyaw = S.vpitch = 0;
@@ -656,6 +660,8 @@ for (const [id, v] of [['#mvF', 1], ['#mvB', -1]]) {
 }
 
 $('#enterBtn').addEventListener('click', enterShop);
+$('#tourBtn').addEventListener('click', () => startTour());
+$('#btnTour').addEventListener('click', () => { if (S.touring) stopTour(true); else startTour(); });
 $('#btnSound').addEventListener('click', () => {
   A.initAudio();
   A.setEnabled(!A.isEnabled());
@@ -722,6 +728,105 @@ function frame() {
     if (!NORENDER && !staticRead && !window.__skipRender) renderer.render(W.scene, camera); else W.scene.updateMatrixWorld();
   }
   requestAnimationFrame(frame);
+}
+
+/* ---------------- built-in 60fps auto-tour ---------------- */
+let tourGen = 0;
+function stopTour(msg = false) {
+  if (!S.touring) return;
+  tourGen++;
+  S.touring = false;
+  $('#btnTour')?.classList.remove('active');
+  if (msg) toast('已切换为自由漫步', 1500);
+}
+
+async function startTour() {
+  const my = ++tourGen;
+  S.touring = true;
+  A.initAudio();
+  const wait = (s) => new Promise((res) => setTimeout(res, s * 1000));
+  const ok = () => my === tourGen;
+  const waitCond = (fn, max = 18) => new Promise((res) => {
+    const t0 = performance.now();
+    const ck = () => { if (!ok() || fn() || (performance.now() - t0) / 1000 > max) res(); else setTimeout(ck, 60); };
+    ck();
+  });
+  const pan = (dyaw, dpitch, dur) => new Promise((res) => {
+    S.turn = { y0: S.yaw, y1: S.yaw + dyaw, p0: S.pitch, p1: clamp(S.pitch + dpitch, -1.0, 0.8), t: 0, dur };
+    setTimeout(res, dur * 1000 + 60);
+  });
+  const readRec = async (rec, flips = 2, gap = 1.65) => {
+    if (!ok() || !rec) return;
+    lookAtPoint(rec.pos, 0.75); await wait(0.8);
+    if (!ok()) return;
+    if (camera.position.distanceTo(rec.pos) > REACH) {
+      walkToRec(rec); toast('走过去看看……', 1200);
+      await waitCond(() => !S.walk && !S.turn);
+      await wait(0.35);
+    }
+    if (!ok()) return;
+    openBook(rec);
+    await waitCond(() => reader.isOpen, 4);
+    await wait(1.3);
+    for (let i = 0; i < flips && ok(); i++) { reader.next(); await wait(gap); }
+    if (!ok()) return;
+    reader.close();
+    await waitCond(() => !S.reading, 4);
+    await wait(0.35);
+  };
+
+  toast('自动漫游开始 · 随时轻触屏幕可接管操作', 2600);
+  if (S.reading) { reader.close(); await waitCond(() => !S.reading, 3); }
+  if (S.phase === 'outside') {
+    await pan(-0.28, 0.02, 1.0); if (!ok()) return;
+    await pan(0.28, -0.02, 0.9); if (!ok()) return;
+    enterShop();
+    await waitCond(() => S.phase === 'inside', 10);
+  }
+  if (!ok()) return;
+  // 1. 环顾四周
+  await wait(0.4);
+  await pan(1.05, 0.06, 1.4); if (!ok()) return; await wait(0.45);
+  await pan(-2.1, -0.04, 2.2); if (!ok()) return; await wait(0.45);
+  await pan(1.05, -0.06, 1.3); if (!ok()) return;
+  // 2. 桌上的书《去买手套》
+  await readRec(W.featuredRecs.find((r) => r.book.id === 'tebukuro'), 3, 1.7);
+  // 3. 左墙《雪女》+ 随机普通旧书
+  await readRec(W.featuredRecs.find((r) => r.book.id === 'yukionna'), 2, 1.6);
+  const filler = W.bookMeshes[0]?.userData.recs.find((r) => !r.hidden && r.pos.x < -3.5 && Math.abs(r.pos.z + 4.3) < 0.7 && r.pos.y > 1.15 && r.pos.y < 1.55);
+  if (filler) await readRec(filler, 2, 1.55);
+  // 4. 里墙丸窗与暖炉
+  const hojoki = W.featuredRecs.find((r) => r.book.id === 'hojoki');
+  if (hojoki && ok()) { walkToRec(hojoki); await waitCond(() => !S.walk && !S.turn); await wait(0.35); }
+  if (!ok()) return;
+  lookAtPoint(new THREE.Vector3(0.3, 1.45, -11.8), 1.0); await wait(1.5);
+  // 5. 柜台撸猫
+  if (!ok()) return;
+  const catPt = W.cat.body.getWorldPosition(new THREE.Vector3());
+  lookAtPoint(catPt, 0.9); await wait(0.95);
+  walkTo(2.2, -9.4, catPt); await waitCond(() => !S.walk && !S.turn);
+  if (!ok()) return;
+  lookAtPoint(catPt, 0.65); await wait(0.75);
+  for (let i = 0; i < 6 && ok(); i++) {
+    const v = catPt.clone().project(camera);
+    const sx = ((v.x + 1) / 2) * window.innerWidth + (i % 2 ? 16 : -16);
+    const sy = ((1 - v.y) / 2) * window.innerHeight;
+    petStroke(sx, sy, 0.85);
+    if (i === 1) toast('墨丸舒服得把下巴抬了起来', 2400);
+    await wait(0.55);
+  }
+  await wait(1.0);
+  // 6. 右侧书架《我是猫》
+  await readRec(W.featuredRecs.find((r) => r.book.id === 'neko'), 2, 1.6);
+  // 7. 沿右走廊绕回前门并走出书店
+  if (!ok()) return;
+  walkTo(2.05, -3.1, new THREE.Vector3(0.2, 1.3, 0));
+  await waitCond(() => !S.walk && !S.turn);
+  await wait(0.4);
+  if (!ok()) return;
+  leaveShop();
+  await waitCond(() => S.phase === 'outside', 18);
+  S.touring = false;
 }
 
 /* ---------------- boot ---------------- */

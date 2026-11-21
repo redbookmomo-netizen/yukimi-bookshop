@@ -24,7 +24,7 @@ function toTex(c, { repeat = [1, 1], srgb = true } = {}) {
   if (srgb) t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeat[0], repeat[1]);
-  t.anisotropy = 8;
+  t.anisotropy = new URLSearchParams(location.search).has('rec') ? 4 : 16;
   t.needsUpdate = true;
   return t;
 }
@@ -257,7 +257,8 @@ function vtext(g, text, cx, y0, size, gap = 1.08) {
 
 export function featuredSpine(book) {
   const w = 128, h = 576;
-  const [c, g] = mk(w, h);
+  const [c, g] = mk(w * 2, h * 2);
+  g.scale(2, 2);
   g.fillStyle = book.color; g.fillRect(0, 0, w, h);
   for (let y = 0; y < h; y += 2) {
     g.fillStyle = `rgba(0,0,0,${Math.random() * 0.06})`; g.fillRect(0, y, w, 1);
@@ -295,7 +296,8 @@ export function featuredSpine(book) {
 
 export function coverTexture(book) {
   const w = 360, h = 512;
-  const [c, g] = mk(w, h);
+  const [c, g] = mk(w * 2, h * 2);
+  g.scale(2, 2);
   g.fillStyle = book.color; g.fillRect(0, 0, w, h);
   // cloth weave
   for (let y = 0; y < h; y += 2) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.07})`; g.fillRect(0, y, w, 1); }
@@ -347,7 +349,8 @@ export function signboardTexture() {
 
 export function norenTexture() {
   const w = 768, h = 384;
-  const [c, g] = mk(w, h);
+  const [c, g] = mk(w * 2, h * 2);
+  g.scale(2, 2);
   g.fillStyle = '#1d2f4f'; g.fillRect(0, 0, w, h);
   for (let y = 0; y < h; y += 2) { g.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`; g.fillRect(0, y, w, 1); }
   for (let x = 0; x < w; x += 3) { g.fillStyle = `rgba(120,150,200,${Math.random() * 0.05})`; g.fillRect(x, 0, 1, h); }
@@ -370,7 +373,8 @@ export function norenTexture() {
 
 export function popCardTexture(text) {
   const w = 160, h = 200;
-  const [c, g] = mk(w, h);
+  const [c, g] = mk(w * 2, h * 2);
+  g.scale(2, 2);
   g.fillStyle = '#f6edd6'; g.fillRect(0, 0, w, h);
   g.strokeStyle = '#b5332a'; g.lineWidth = 4; g.strokeRect(6, 6, w - 12, h - 12);
   g.fillStyle = '#b5332a'; g.font = `bold 30px ${SERIF}`; g.textAlign = 'center'; g.textBaseline = 'middle';
